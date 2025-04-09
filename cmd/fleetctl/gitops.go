@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/fleetdm/fleet/v4/pkg/spec"
 	"github.com/fleetdm/fleet/v4/server/fleet"
+	"github.com/fleetdm/fleet/v4/server/ptr"
 	"github.com/fleetdm/fleet/v4/server/service"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/text/unicode/norm"
@@ -19,6 +21,15 @@ const filenameMaxLength = 255
 type LabelUsage struct {
 	Name string
 	Type string
+}
+
+func prettyPrint(v any) {
+	bytes, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		return
+	}
+	fmt.Println(string(bytes))
 }
 
 func gitopsCommand() *cli.Command {
@@ -87,6 +98,8 @@ func gitopsCommand() *cli.Command {
 
 			// We need the controls from no-team.yml to apply them when applying the global app config.
 			noTeamControls, noTeamPresent, err := extractControlsForNoTeam(flFilenames, appConfig)
+			// fmt.Println("noTeamControls: ")
+			// prettyPrint(noTeamControls)
 			if err != nil {
 				return fmt.Errorf("extracting controls from no-team.yml: %w", err)
 			}
@@ -126,6 +139,8 @@ func gitopsCommand() *cli.Command {
 			for _, flFilename := range flFilenames.Value() {
 				baseDir := filepath.Dir(flFilename)
 				config, err := spec.GitOpsFromFile(flFilename, baseDir, appConfig, logf)
+				fmt.Println(flFilename)
+				prettyPrint(config)
 				if err != nil {
 					return err
 				}
@@ -338,6 +353,14 @@ func gitopsCommand() *cli.Command {
 						}
 					}
 				}
+			}
+
+			if !noTeamPresent {
+				fmt.Println("set no teams to default values")
+				defaultNoTeamConfig := new(spec.GitOps)
+				defaultNoTeamConfig.TeamName = ptr.String("No team")
+				fleetClient.DoGitOps(c.Context, defaultNoTeamConfig, "no-team.yml", logf, flDryRun, nil, appConfig,
+					map[string][]fleet.SoftwarePackageResponse{}, map[string][]fleet.VPPAppResponse{}, map[string][]fleet.ScriptResponse{})
 			}
 
 			if flDryRun {
